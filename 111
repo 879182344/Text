@@ -1,0 +1,100 @@
+下面是一个完整的程序框架，整合了从网站抓取V2ray订阅链接并更新到Shadowrocket客户端所需的各个部分，包括Scrapy爬虫、数据处理和更新功能。这个框架可以直接在你的环境中进行实现和调整。
+
+1. 项目目录结构
+首先，确保你的项目目录结构如下：
+
+v2ray_scraper/
+│
+├── v2ray_scraper/
+│   ├── __init__.py
+│   ├── items.py
+│   ├── middlewares.py
+│   ├── pipelines.py
+│   ├── settings.py
+│   └── spiders/
+│       └── v2ray_spider.py
+│
+├── run_spider.sh
+└── requirements.txt
+
+2. requirements.txt 文件
+创建 requirements.txt 文件以列出依赖项：
+
+scrapy
+
+3. 爬虫代码 (v2ray_spider.py)
+在 v2ray_scraper/spiders/v2ray_spider.py 中编写以下代码：
+
+import scrapy
+import json
+
+class V2RaySpider(scrapy.Spider):
+    name = "v2ray"
+    start_urls = ["https://freessrnode.github.io/"]
+
+    def parse(self, response):
+        articles = response.css('article')
+        data = []
+        
+        for article in articles:
+            title = article.css('h2 a::text').get()
+            link = article.css('h2 a::attr(href)').get()
+            # 假设我们只关心 V2ray 的文章
+            if title and "V2ray" in title:
+                # 模拟带宽和延迟数据，这里你需要根据实际情况抓取这些信息
+                latency = self.simulate_latency()  # 模拟延迟
+                bandwidth = self.simulate_bandwidth()  # 模拟带宽
+                data.append({'title': title, 'link': link, 'latency': latency, 'bandwidth': bandwidth})
+
+        # 处理抓取到的数据
+        processed_servers = self.process_data(data)
+        self.update_shadowrocket(processed_servers)
+
+    def simulate_latency(self):
+        # 此处添加真实的延迟获取逻辑
+        return random.randint(1, 100)  # 模拟延迟
+
+    def simulate_bandwidth(self):
+        # 此处添加真实的带宽获取逻辑
+        return random.randint(50, 300)  # 模拟带宽
+
+    def process_data(self, data):
+        # 按照延迟最小和带宽最大选择前十条信息
+        return sorted(data, key=lambda x: (x['latency'], -x['bandwidth']))[:10]
+
+    def update_shadowrocket(self, servers):
+        config_path = "path/to/shadowrocket_config.conf"  # 更新为正确路径
+        with open(config_path, "w") as f:
+            for server in servers:
+                f.write(f"{server['link']}\n")
+
+4. 脚本执行文件 (run_spider.sh)
+在项目根目录下创建 run_spider.sh 文件用于执行爬虫：
+
+#!/bin/bash
+cd /path/to/v2ray_scraper  # 替换为你的项目绝对路径
+scrapy crawl v2ray
+
+给脚本执行权限：
+
+chmod +x run_spider.sh
+
+5. 设置Cron作业
+使用 cron 来定期执行这个脚本。编辑你的 crontab 文件：
+
+crontab -e
+
+添加以下行以每天运行一次该脚本（假设你希望在午夜执行）：
+
+0 0 * * * /path/to/run_spider.sh
+
+6. 安装依赖
+在项目根目录下运行以下命令以安装依赖项：
+
+pip install -r requirements.txt
+
+7. 注意事项
+模拟数据：此示例中的延迟和带宽数据是模拟的，你需要根据实际需求实现真实的数据获取逻辑。
+Shadowrocket配置路径：请确保更新 update_shadowrocket 方法中的Shadowrocket配置文件路径。
+测试：在将其部署到生产环境之前，请确保进行充分的测试，确认所有功能正常。
+这样，你就建立了一个全自动化的系统，可以定时抓取V2ray订阅链接并更新到Shadowrocket客户端。根据自己的需求进行必要的修改和扩展。
