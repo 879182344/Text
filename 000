@@ -1,0 +1,17 @@
+要实现从指定网站抓取V2ray订阅链接，并且将结果更新到Shadowrocket客户端中，你可以通过Scrapy和cron的组合来完成。这是一个较为复杂的任务，涉及多个步骤。下面将提供一个基本的实现思路。
+
+1. 安装必要的库
+首先，确保你已经安装了Python、Scrapy以及其他必要的依赖：
+
+bash
+复制代码
+pip install scrapy
+2. 创建Scrapy项目
+创建一个新的Scrapy项目：
+
+bash
+复制代码
+scrapy startproject v2ray_scraper
+cd v2ray_scraper
+3. 编写爬虫
+
