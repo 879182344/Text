@@ -3,15 +3,87 @@
 1. 安装必要的库
 首先，确保你已经安装了Python、Scrapy以及其他必要的依赖：
 
-bash
-复制代码
 pip install scrapy
+
 2. 创建Scrapy项目
 创建一个新的Scrapy项目：
 
-bash
-复制代码
 scrapy startproject v2ray_scraper
 cd v2ray_scraper
-3. 编写爬虫
 
+3. 编写爬虫
+在 v2ray_scraper/spiders 目录下创建一个新的爬虫文件 v2ray_spider.py：
+
+import scrapy
+
+class V2RaySpider(scrapy.Spider):
+    name = "v2ray"
+    start_urls = ["https://freessrnode.github.io/"]
+
+    def parse(self, response):
+        # 提取最新文章中的V2ray订阅链接
+        articles = response.css('article')
+        for article in articles:
+            title = article.css('h2 a::text').get()
+            link = article.css('h2 a::attr(href)').get()
+            if "V2ray" in title:
+                yield {
+                    'title': title,
+                    'link': link
+                }
+4. 数据处理
+接下来，我们需要编写代码处理抓取到的数据，选择延迟最小且带宽最大的前十条信息。假设你有一个函数 process_data() 来处理数据（你需要根据具体情况实现它）：
+
+def process_data(data):
+    # 这里我们需要对数据进行处理并选择出最优的10条信息
+    # 实现你的逻辑来选择延迟最小且带宽最大的前十条
+    # 返回处理后的结果
+    return sorted(data, key=lambda x: (x['latency'], -x['bandwidth']))[:10]
+
+5. 更新到Shadowrocket
+你需要将最终选择的数据格式化为 Shadowrocket 可以识别的格式，例如：
+
+def update_shadowrocket(servers):
+    with open("path/to/shadowrocket_config.conf", "w") as f:
+        for server in servers:
+            f.write(f"{server['link']}\n")
+
+6. 整合所有代码
+整合上面的代码，最终的爬虫可能看起来像这样：
+
+import scrapy
+import json
+
+class V2RaySpider(scrapy.Spider):
+    name = "v2ray"
+    start_urls = ["https://freessrnode.github.io/"]
+
+    def parse(self, response):
+        articles = response.css('article')
+        data = []
+        
+        for article in articles:
+            title = article.css('h2 a::text').get()
+            link = article.css('h2 a::attr(href)').get()
+            if "V2ray" in title:
+                data.append({'title': title, 'link': link})
+        
+        # 假设有延迟和带宽的数据
+        processed_servers = process_data(data)
+        update_shadowrocket(processed_servers)
+
+7. 设置Cron作业
+最后，你可以使用cron来定��运行这个爬虫。编辑你的crontab文件：
+
+crontab -e
+
+添加以下行以每天运行一次该脚本（假设该脚本命名为run_spider.sh并放在 /path/to/script）：
+
+0 0 * * * cd /path/to/v2ray_scraper && scrapy crawl v2ray
+
+8. 其他注意事项
+确保你的Shadowrocket配置路径正确。
+确保你有足够的权限来写入Shadowrocket配置文件。
+根据实际需求调整数据处理逻辑。
+测试各个部分，以确保它们能正常工作。
+这样，你就可以实现一个全自动定时抓取V2ray订阅链接并更新到Shadowrocket客户端的系统。
