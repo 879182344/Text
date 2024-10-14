@@ -1,0 +1,95 @@
+当然可以进一步增强脚本，使其更加健壮和用户友好。我们可以增加更多的错误检查和处理机制，以及提供详细的日志记录和输出信息，以便用户了解每一步的操作情况。此外，我们还可以让脚本更具交互性，允许用户选择是否要执行某些操作，如添加用户到`docker`组，以便非root用户也可以使用Docker命令。
+
+以下是进一步增强后的脚本：
+
+```bash
+#!/bin/bash
+
+# 检查是否以root权限运行
+if [[ "$EUID" -ne 0 ]]; then
+    echo "请以root权限运行此脚本。"
+    exit 1
+fi
+
+# 定义常量
+DOCKER_URL="https://download.docker.com/linux/debian"
+DOCKER_KEY_URL="$DOCKER_URL/gpg"
+DOCKER_REPO="deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] $DOCKER_URL $(lsb_release -cs) stable"
+
+# 函数：检查Docker是否已安装
+is_docker_installed() {
+    command -v docker >/dev/null 2>&1
+}
+
+# 函数：安装Docker
+install_docker() {
+    # 更新包列表
+    echo "正在更新包索引..."
+    apt-get update || { echo "更新包索引失败"; exit 1; }
+
+    # 安装必需的软件包
+    echo "安装必要的软件包..."
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+
+    # 添加Docker的官方GPG密钥
+    echo "添加Docker的官方GPG密钥..."
+    curl -fsSL $DOCKER_KEY_URL | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+    # 设置稳定仓库
+    echo "设置稳定仓库..."
+    echo "$DOCKER_REPO" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # 再次更新包索引
+    echo "再次更新包索引..."
+    apt-get update || { echo "更新包索引失败"; exit 1; }
+
+    # 安装Docker引擎
+    echo "安装Docker引擎..."
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # 启动Docker服务
+    echo "启动Docker服务..."
+    systemctl start docker
+
+    # 设置开机启动
+    echo "设置Docker开机启动..."
+    systemctl enable docker
+
+    # 验证安装
+    echo "验证安装..."
+    docker --version
+}
+
+# 函数：询问用户是否将当前用户添加到docker组
+add_user_to_docker_group() {
+    read -p "是否将当前用户添加到docker组？(y/n): " response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        usermod -aG docker $SUDO_USER
+        echo "用户已添加到docker组。请重新登录以使更改生效。"
+    else
+        echo "未添加用户到docker组。"
+    fi
+}
+
+# 主程序
+echo "开始部署Docker环境..."
+
+# 如果Docker未安装，则安装
+if ! is_docker_installed; then
+    install_docker
+else
+    echo "Docker已安装，跳过安装步骤。"
+fi
+
+# 提供选项将当前用户添加到docker组
+add_user_to_docker_group
+
+echo "Docker环境部署完成！"
+```
+
+（脚本编写完成后，保存文件并给予执行权限）
+chmod +x super-enhanced-deploy-docker.sh
+
+（最后，以root权限运行脚本）
+sudo ./super-enhanced-deploy-docker.sh
+
