@@ -1,0 +1,184 @@
+好的，我们可以将创建和配置 systemd 服务文件的功能集成到一键部署脚本中。这样，脚本不仅可以部署 Harbor，还可以自动设置服务的开机自启动。
+
+以下是更新后的脚本，包含了创建和配置 systemd 服务文件的功能：
+
+### 集成一键部署脚本
+
+```bash
+#!/bin/bash
+
+# 设置日志级别
+LOG_LEVEL="INFO"
+HARBOR_VERSION="2.5.0"
+HARBOR_URL="https://github.com/goharbor/harbor/releases/download/v$HARBOR_VERSION/harbor-offline-installer-v$HARBOR_VERSION.tgz"
+HARBOR_DIR="/opt/harbor"
+HARBOR_CFG="${HARBOR_DIR}/harbor.cfg"
+HARBOR_INSTALLER="${HARBOR_DIR}/harbor-offline-installer-v$HARBOR_VERSION.tgz"
+EXTERNAL_URL="http://$(hostname).local"
+HARBOR_HOSTNAME="$(hostname).local"
+START_HARBOR_SCRIPT="${HARBOR_DIR}/start_harbor.sh"
+SYSTEMD_SERVICE_FILE="/etc/systemd/system/harbor.service"
+
+# 日志记录函数
+log() {
+    local level=$1
+    shift
+    # 输出日志消息
+    echo "[${level}] $@"
+}
+
+# 检查所需依赖是否已安装
+ensure_dependencies_installed() {
+    # 循环遍历依赖列表
+    for dependency in "docker" "docker-compose"; do
+        # 如果依赖不在路径中，则认为未安装
+        if ! command -v $dependency &> /dev/null; then
+            log ERROR "${dependency} 未安装。"
+            # 调用安装函数
+            install_dependency $dependency
+            return
+        else
+            log INFO "${dependency} 已安装。"
+        fi
+    done
+}
+
+# 安装缺失的依赖项
+install_dependency() {
+    local dependency=$1
+    # 根据依赖项类型执行相应的安装命令
+    case $dependency in
+        docker)
+            sudo apt-get update
+            sudo apt-get install docker.io -y
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            ;;
+        docker-compose)
+            sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+            ;;
+        *)
+            log ERROR "未知依赖项: $dependency"
+            exit 1
+            ;;
+    esac
+    log INFO "${dependency} 安装完成。"
+}
+
+# 准备 Harbor 安装目录
+prepare_directory() {
+    # 创建 Harbor 目录
+    mkdir -p $HARBOR_DIR
+    # 进入该目录
+    cd $HARBOR_DIR
+}
+
+# 从 GitHub 下载 Harbor 安装包
+download_harbor_installer() {
+    # 下载 Harbor 安装包
+    wget $HARBOR_URL
+    if [ $? -ne 0 ]; then
+        log ERROR "下载 Harbor 安装包失败。"
+        exit 1
+    fi
+    log INFO "Harbor 安装包下载完成。"
+}
+
+# 解压 Harbor 安装包
+extract_harbor_installer() {
+    # 解压下载的 tgz 文件
+    tar xvfz $HARBOR_INSTALLER
+    log INFO "Harbor 安装包解压完成。"
+}
+
+# 配置 Harbor 安装所需的参数
+configure_harbor() {
+    # 复制默认配置文件到当前目录
+    cp -f harbor/harbor.cfg .
+    # 修改配置文件中的 hostname 和 external_url
+    sed -i "s@hostname.*@hostname = $HARBOR_HOSTNAME@g" $HARBOR_CFG
+    sed -i "s@external_url.*@external_url = $EXTERNAL_URL@g" $HARBOR_CFG
+    log INFO "Harbor 配置文件生成完成。"
+}
+
+# 执行 Harbor 安装脚本
+install_harbor() {
+    # 进入 harbor 子目录
+    cd harbor
+    # 执行安装脚本
+    ./install.sh -c ../$HARBOR_CFG
+    if [ $? -ne 0 ]; then
+        log ERROR "Harbor 安装失败。"
+        exit 1
+    fi
+    log INFO "Harbor 安装完成。"
+}
+
+# 启动 Harbor 服务
+start_harbor_services() {
+    # 返回上一级目录
+    cd ..
+    # 使用 docker-compose 启动 Harbor 服务
+    docker-compose up -d
+    if [ $? -ne 0 ]; then
+        log ERROR "启动 Harbor 服务失败。"
+        exit 1
+    fi
+    log INFO "Harbor 服务启动完成。"
+}
+
+# 创建 systemd 服务文件
+create_systemd_service() {
+    cat > $SYSTEMD_SERVICE_FILE <<EOF
+[Unit]
+Description=Harbor Docker Registry Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=$HARBOR_DIR
+ExecStart=$START_HARBOR_SCRIPT
+Restart=on-failure
+RestartSec=10s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable harbor.service
+    sudo systemctl start harbor.service
+
+    log INFO "Systemd 服务配置完成。"
+}
+
+# 主逻辑函数
+main() {
+    # 检查依赖项
+    ensure_dependencies_installed
+    # 准备 Harbor 安装目录
+    prepare_directory
+    # 下载 Harbor 安装包
+    download_harbor_installer
+    # 解压 Harbor 安装包
+    extract_harbor_installer
+    # 配置 Harbor 参数
+    configure_harbor
+    # 安装 Harbor
+    install_harbor
+    # 启动 Harbor 服务
+    start_harbor_services
+    # 创建 systemd 服务文件
+    create_systemd_service
+}
+
+# 执行主逻辑
+main
+```
+
+### 新增功能
+
+1. **创建 systemd 服务文件**: 在脚本中新增了一个 `create_systemd_service` 函数，用于生成并配置 systemd 服务文件。
+2. **启动服务**: 通过 `systemctl` 命令启动并启用服务，确保在系统启动时自动运行。
